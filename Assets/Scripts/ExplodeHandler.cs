@@ -6,8 +6,9 @@ public class CubesCreator : MonoBehaviour
     [SerializeField] private Cube _cubePrefab;
     [SerializeField] private List<Cube> _firstCubes;
 
-    [SerializeField] private float _explosionForce = 1;
-    [SerializeField] private float _explosionRadius = 10;
+    [SerializeField] private float _explosionForce = 1f;
+    [SerializeField] private float _explosionRadius = 10f;
+    [SerializeField] private float _affectedZoneRadius = 15f;
 
     private void Awake()
     {
@@ -31,18 +32,23 @@ public class CubesCreator : MonoBehaviour
             for (int i = 0; i < cube.ShardsCount; i++)
             {
                 Cube newCube = Instantiate(_cubePrefab, cube.transform.position, new Quaternion(0, 0, 0, 0));
-                newCube.Initialize(newSize, incrementalGrade, GenerateNewColor());
+                newCube.Initialize(newSize, incrementalGrade, Random.ColorHSV());
 
                 newCube.CubeClicked += ExplodeClickedCube;
 
                 newCube.GetComponent<Rigidbody>().AddExplosionForce(_explosionForce, cube.transform.position, _explosionRadius);
             }
         }
+        else
+        {
+            ExplodeWithoutSplit(cube);
+        }
 
         cube.CubeClicked -= ExplodeClickedCube;
 
         Destroy(cube.gameObject);
     }
+
 
     private bool GenerateChanceToSplitCube(int grade)
     {
@@ -54,17 +60,32 @@ public class CubesCreator : MonoBehaviour
         return Random.Range(0, fullPercentChance) <= currentPercentChance;
     }
 
-    private Color GenerateNewColor()
+    private void ExplodeWithoutSplit(Cube cube)
     {
-        float minColorValue = 0;
-        float maxColorValue = 1;
-        Color newColor = new Color();
+        List<Rigidbody> nearbyCubes = GetExplodeHittedCubes(cube);
 
-        newColor.r = Random.Range(minColorValue, maxColorValue);
-        newColor.g = Random.Range(minColorValue, maxColorValue);
-        newColor.b = Random.Range(minColorValue, maxColorValue);
-        newColor.a = maxColorValue;
+        if (nearbyCubes.Count == 0)
+            return;
 
-        return newColor;
+        foreach (Rigidbody cubeRigidbody in nearbyCubes) 
+        {
+            float distance = Vector3.Distance(cubeRigidbody.transform.position, cube.transform.position);
+            float ScaledForce = (_explosionForce - distance) * cube.Grade;
+
+            cubeRigidbody.AddExplosionForce(ScaledForce, cube.transform.position, _explosionRadius * cube.Grade);
+        }
+    }
+
+    private List<Rigidbody> GetExplodeHittedCubes(Cube cube)
+    {
+        Collider[] hits = Physics.OverlapSphere(cube.transform.position, _affectedZoneRadius * cube.Grade);
+
+        List<Rigidbody> cubes = new List<Rigidbody>();
+
+        foreach (Collider hit in hits) 
+            if (hit.TryGetComponent(out Cube component) || hit.attachedRigidbody != null)
+                cubes.Add(hit.attachedRigidbody);
+
+        return cubes;
     }
 }
